@@ -1,0 +1,65 @@
+# .github/workflows/gas-regression.yml
+name: Gas Regression Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gas-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      
+      - name: 🔧 Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      
+      - name: 📦 Install dependencies
+        run: forge install
+      
+      - name: 🔨 Compile contracts
+        run: forge build
+      
+      - name: 📊 Run gas baseline measurement
+        run: |
+          echo "📊 Measuring gas baseline..."
+          forge test --match-contract GasBaseline -vv
+      
+      - name: 🎯 Run gas limit tests
+        run: |
+          echo "🎯 Testing gas limits..."
+          forge test --match-contract GasLimits -vv
+        continue-on-error: false
+      
+      - name: 📈 Generate detailed gas report
+        run: |
+          echo "📈 Generating gas report..."
+          forge test --gas-report > gas-report.txt
+          cat gas-report.txt
+      
+      - name: 💾 Upload gas report artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: gas-report
+          path: gas-report.txt
+      
+      - name: 📸 Check gas snapshot
+        run: |
+          echo "📸 Comparing with gas snapshot baseline..."
+          forge snapshot --match-contract GasLimits --check --snap .gas-snapshot || {
+            echo "⚠️ Gas snapshot differs from baseline!"
+            forge snapshot --match-contract GasLimits --diff .gas-snapshot
+            exit 1
+          }
+      
+      - name: ✅ All checks passed
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ All gas regression checks passed!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
